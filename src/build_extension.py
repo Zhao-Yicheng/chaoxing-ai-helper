@@ -27,7 +27,7 @@ LIBS = os.path.join(BASE, "libs")
 SHIMS = r"""
 /* ================= GM API 垫片（内容脚本 MAIN world 用） ================= */
 var __GM_PREFIX = 'gptjs_gm_';
-var GM_info = { script: { version: '3.2.11', name: '学习通AI答题助手(扩展版)' } };
+var GM_info = { script: { version: '3.2.12', name: '学习通AI答题助手(扩展版)' } };
 var unsafeWindow = window;
 
 function GM_getValue(key, dflt) {
@@ -155,7 +155,7 @@ var md5 = __MD5;
     manifest = {
         "manifest_version": 3,
         "name": "学习通AI答题助手（免积分版）",
-        "version": "3.2.11",
+        "version": "3.2.12",
         "description": "学习通/超星作业考试 AI 自动答题，免积分破解版：免费通道 + 后台自动铸号。",
         "minimum_chrome_version": "111",
         "homepage_url": "https://github.com/Zhao-Yicheng/chaoxing-ai-helper",

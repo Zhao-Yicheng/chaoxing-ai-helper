@@ -1,11 +1,15 @@
 // ==UserScript==
 // @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/Zhao-Yicheng/chaoxing-ai-helper
-// @version             3.2.11
+// @version             3.2.12
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
 // @downloadURL         https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
+// @connect             *
+// @connect             cors.eu.org
+// @connect             api.allorigins.win
+// @connect             api.cors.lol
 // @match               *://*.chaoxing.com/*
 // @match               *://*.xuexitong.com/*
 // @match               *://*.edu.cn/*
@@ -371,6 +375,7 @@ function crackAuthVia(url, uid) {
 }
 
 var crackRelayCool = {};
+var crackNetFail = 0;
 
 function crackRelayScore(relay) {
     try {
@@ -422,6 +427,8 @@ function crackMintAttempt(relay) {
             return { u: uid, s: res.score };
         }
         crackLog('铸号失败 [' + tag + '] http=' + res.status + ' score=' + res.score);
+        if (res.status === -1 || res.status === -2) { crackNetFail++; }
+        else { crackNetFail = 0; }
         crackRelayScoreUp(relay, -0.2);
         if (res.status === 429) crackRelayMark(relay, 180000);        // 限流：3 分钟
         else if (res.status === -1 || res.status === 408) crackRelayMark(relay, 90000); // 超时：1.5 分钟
@@ -461,6 +468,15 @@ function crackMintRound(parallel) {
     return Promise.all(jobs).then(function (all) {
         var got = all.filter(Boolean);
         crackPoolStats(got.length ? 1 : 0, got.length ? 0 : 1);
+        if (!got.length && crackNetFail >= 2) {
+            var lastHint = 0;
+            try { lastHint = parseInt(localStorage.getItem('GPTJsCrack.netHintAt') || '0', 10); } catch (e) { }
+            if (Date.now() - lastHint > 600000) {
+                try { localStorage.setItem('GPTJsCrack.netHintAt', String(Date.now())); } catch (e) { }
+                crackLog('中转全部网络层失败（http=-1）：多半是脚本管理器 @connect 未放行中转域名，或本机代理/防火墙拦了中转站');
+                crackKeeperStatus('中转连不通（检查 @connect 或代理）');
+            }
+        }
         return got;
     });
 }
