@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/Zhao-Yicheng/chaoxing-ai-helper
-// @version             3.2.12
+// @version             3.3.0
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
@@ -2054,6 +2054,7 @@ function showBox() {
                         <label><input type="checkbox" id="GPTJsSetting.goodStudent">答案加粗不选择</label>
                         <label><input type="checkbox" id="GPTJsSetting.alterTitle" checked>答案插入题目后</label>
                         <p></p>
+                        <label title="从上次看到的位置继续，不用从头再刷"><input type="checkbox" id="GPTJsSetting.resume" checked>断点续看 (从上次位置继续)</label>
                         <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
                     </div>
                     <div id="ne-21thinking">
@@ -2226,7 +2227,11 @@ function showBox() {
                 localStorage.setItem('GPTJsSetting.sub', 'true');
             }
 
-            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch'].forEach(function (settingId) {
+            if (localStorage.getItem('GPTJsSetting.resume') === null) {
+                localStorage.setItem('GPTJsSetting.resume', 'true');
+            }
+
+            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch', 'resume'].forEach(function (settingId) {
                 var checkbox = document.getElementById('GPTJsSetting.' + settingId);
                 if (!checkbox) return;
                 checkbox.addEventListener('change', updateLocalStorage);
@@ -2866,6 +2871,51 @@ async function playMedia(playFunction) {
     }
 }
 
+/* ==================== 断点续看 ==================== */
+var RESUME_CKPT_PREFIX = 'GPTJsCheckpoint.';
+
+function isResumeEnabled() {
+    var v = localStorage.getItem('GPTJsSetting.resume');
+    return v === null ? true : v === 'true';
+}
+
+function getServerOffsetSeconds(obj) {
+    try {
+        var ho = parseInt(obj && obj.headOffset, 10);
+        if (isFinite(ho) && ho > 0) return Math.floor(ho / 1000);
+        var pt = parseInt(obj && obj.playTime, 10);
+        if (isFinite(pt) && pt > 0) return pt > 10000 ? Math.floor(pt / 1000) : pt;
+    } catch (e) { }
+    return 0;
+}
+
+function getResumeCheckpoint(objectId) {
+    try {
+        var v = parseFloat(localStorage.getItem(RESUME_CKPT_PREFIX + objectId) || '0');
+        return isFinite(v) && v > 0 ? v : 0;
+    } catch (e) { return 0; }
+}
+
+function saveResumeCheckpoint(objectId, sec) {
+    if (!objectId || !isFinite(sec) || sec < 1) return;
+    try { localStorage.setItem(RESUME_CKPT_PREFIX + objectId, String(Math.floor(sec))); } catch (e) { }
+}
+
+function clearResumeCheckpoint(objectId) {
+    try { localStorage.removeItem(RESUME_CKPT_PREFIX + objectId); } catch (e) { }
+}
+
+/* 计算应该从第几秒开始：本地记录与实际进度取较大值，接近结尾则归零 */
+function computeResumeSeconds(obj, objectId, duration) {
+    if (!isResumeEnabled()) return 0;
+    var fromServer = getServerOffsetSeconds(obj);
+    var fromLocal = getResumeCheckpoint(objectId);
+    var sec = Math.max(fromServer, fromLocal);
+    if (sec > 0 && isFinite(duration) && duration > 0 && sec >= duration - 3) sec = 0;
+    return Math.max(0, Math.floor(sec));
+}
+/* ==================== 断点续看 END ==================== */
+
 function missonVideo(dom, obj) {
     const { isPassed, otherInfo, property } = obj;
     const { _jobid: jobId, name, objectid: objectId, module } = property;
@@ -3029,6 +3079,13 @@ function missonVideo(dom, obj) {
                     }
 
                     let _playbackResolved = false;
+                    // 断点续看：每 5 秒记录一次进度，结束后清掉
+                    const _ckptId = setInterval(() => {
+                        if (isResumeEnabled() && !media.ended && media.currentTime > 1) {
+                            saveResumeCheckpoint(objectId, media.currentTime);
+                        }
+                    }, 5000);
+
                     const _doResolve = (reason) => {
                         if (_playbackResolved) return;
                         _playbackResolved = true;
@@ -3038,6 +3095,10 @@ function missonVideo(dom, obj) {
                         if (quizIntervalId) clearInterval(quizIntervalId);
                         clearInterval(reloadInterval);
                         clearInterval(_stallCheckId);
+                        clearInterval(_ckptId);
+                        if (!reason || reason.indexOf('完成') >= 0 || /\u5b8c\u6210/.test(reason)) {
+                            clearResumeCheckpoint(objectId);
+                        }
                         resolve();
                     };
                     media.addEventListener("ended", () => { _doResolve('已播放完成'); });
@@ -3069,7 +3130,32 @@ function missonVideo(dom, obj) {
                     }, 30 * 1000);
 
                     media.muted = true;
-                    media.currentTime = 0;
+
+                    // ===== 断点续看：跳到上次看到的位置 =====
+                    var _resumeTarget = 0;
+                    var _resumeApplied = false;
+                    var applyResume = function () {
+                        if (_resumeApplied) return;
+                        _resumeApplied = true;
+                        _resumeTarget = computeResumeSeconds(obj, objectId, media.duration);
+                        if (_resumeTarget > 0) {
+                            try {
+                                media.currentTime = _resumeTarget;
+                                logger(`断点续看：${name} 从 ${_resumeTarget}s 继续（总 ${Math.floor(media.duration || 0)}s）`, 'green');
+                            } catch (e) {
+                                logger('断点续看跳转失败，从头播放', 'orange');
+                            }
+                        }
+                    };
+                    var _resumeDummy = computeResumeSeconds(obj, objectId, NaN);
+                    if (_resumeDummy > 0) {
+                        if (isFinite(media.duration) && media.duration > 0) applyResume();
+                        else {
+                            media.addEventListener('loadedmetadata', applyResume, { once: true });
+                            setTimeout(applyResume, 3000);   // 兜底：元数据迟迟不来也试一次
+                        }
+                    }
+
                     setTimeout(() => {
                         playMedia(() => media.play()).then(() => {
                             hookMediaRate(media, finalRate);

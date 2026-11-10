@@ -6,7 +6,7 @@
 > 基于 Ne-21《ChatGPT学习通作业考试助手》v3.2.9 改造。
 
 <p align="left">
-  <img alt="version" src="https://img.shields.io/badge/version-3.2.10-059669">
+  <img alt="version" src="https://img.shields.io/badge/version-3.3.0-059669">
   <img alt="platform" src="https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20%7C%20Firefox-2563eb">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-black">
   <img alt="cost" src="https://img.shields.io/badge/%E7%A7%AF%E5%88%86%E6%B6%88%E8%80%97-0-ef4444">
@@ -32,6 +32,11 @@
 ## 🎬 刷课（视频 / 音频 / 文档）
 
 - **视频**：自动开始、自动倍速、自动静音、弹题自动作答、播完自动跳下一个
+- **断点续看** 🆕：从上次看到的位置继续，不用从头再刷
+  - 优先用服务端记录的 `headOffset` / `playTime`
+  - 叠加本地每 5 秒写一次的检查点（`localStorage: GPTJsCheckpoint.<objectId>`），页面刷新/崩溃也不丢
+  - 两者取较大值，接近结尾（差 3 秒内）自动归零从头播
+  - 面板「设置」里可关：**断点续看 (从上次位置继续)**，默认开
 - **音频**：智能挂机，**支持补挂时长**（原来没挂够的任务点会自动补齐）
 - **文档**：自动浏览、自动翻页、到时长自动完成
 - **防检测**：拦截失焦 / 页面隐藏事件，后台挂课不被判定
@@ -192,6 +197,14 @@ var CRACK = {
     mintParallel: 2,          // 每轮并发中转数
     relayTimeout: 15000
 };
+```
+
+刷课相关设置存在 `localStorage`（面板 → 设置里可改）：
+
+```js
+GPTJsSetting.resume    // 断点续看，默认 'true'
+GPTJsSetting.rate      // 倍速，默认 1
+GPTJsSetting.video / GPTJsSetting.audio   // 是否处理视频 / 音频任务
 ```
 
 浏览器控制台调试：

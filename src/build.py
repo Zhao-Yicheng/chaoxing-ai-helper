@@ -25,7 +25,7 @@ HEADER_OLD = """// @name                ChatGPT学习通作业考试助手
 
 HEADER_NEW = f"""// @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/{REPO}
-// @version             3.2.12
+// @version             3.3.0
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           {RAW}
@@ -138,6 +138,162 @@ function getAnswer(_t, _q, retryCount = 0) {
 function doWork(index, doms, dom) {"""
 
 
+# ---------------- 断点续看补丁 ----------------
+RESUME_HELPERS = r"""/* ==================== 断点续看 ==================== */
+var RESUME_CKPT_PREFIX = 'GPTJsCheckpoint.';
+
+function isResumeEnabled() {
+    var v = localStorage.getItem('GPTJsSetting.resume');
+    return v === null ? true : v === 'true';
+}
+
+function getServerOffsetSeconds(obj) {
+    try {
+        var ho = parseInt(obj && obj.headOffset, 10);
+        if (isFinite(ho) && ho > 0) return Math.floor(ho / 1000);
+        var pt = parseInt(obj && obj.playTime, 10);
+        if (isFinite(pt) && pt > 0) return pt > 10000 ? Math.floor(pt / 1000) : pt;
+    } catch (e) { }
+    return 0;
+}
+
+function getResumeCheckpoint(objectId) {
+    try {
+        var v = parseFloat(localStorage.getItem(RESUME_CKPT_PREFIX + objectId) || '0');
+        return isFinite(v) && v > 0 ? v : 0;
+    } catch (e) { return 0; }
+}
+
+function saveResumeCheckpoint(objectId, sec) {
+    if (!objectId || !isFinite(sec) || sec < 1) return;
+    try { localStorage.setItem(RESUME_CKPT_PREFIX + objectId, String(Math.floor(sec))); } catch (e) { }
+}
+
+function clearResumeCheckpoint(objectId) {
+    try { localStorage.removeItem(RESUME_CKPT_PREFIX + objectId); } catch (e) { }
+}
+
+/* 计算应该从第几秒开始：本地记录与实际进度取较大值，接近结尾则归零 */
+function computeResumeSeconds(obj, objectId, duration) {
+    if (!isResumeEnabled()) return 0;
+    var fromServer = getServerOffsetSeconds(obj);
+    var fromLocal = getResumeCheckpoint(objectId);
+    var sec = Math.max(fromServer, fromLocal);
+    if (sec > 0 && isFinite(duration) && duration > 0 && sec >= duration - 3) sec = 0;
+    return Math.max(0, Math.floor(sec));
+}
+/* ==================== 断点续看 END ==================== */
+
+function missonVideo(dom, obj) {"""
+
+RESUME_APPLY_OLD = """                    media.muted = true;
+                    media.currentTime = 0;
+                    setTimeout(() => {
+                        playMedia(() => media.play()).then(() => {
+                            hookMediaRate(media, finalRate);
+                        }).catch(reject);
+                    }, 200);"""
+
+RESUME_APPLY_NEW = """                    media.muted = true;
+
+                    // ===== 断点续看：跳到上次看到的位置 =====
+                    var _resumeTarget = 0;
+                    var _resumeApplied = false;
+                    var applyResume = function () {
+                        if (_resumeApplied) return;
+                        _resumeApplied = true;
+                        _resumeTarget = computeResumeSeconds(obj, objectId, media.duration);
+                        if (_resumeTarget > 0) {
+                            try {
+                                media.currentTime = _resumeTarget;
+                                logger(`断点续看：${name} 从 ${_resumeTarget}s 继续（总 ${Math.floor(media.duration || 0)}s）`, 'green');
+                            } catch (e) {
+                                logger('断点续看跳转失败，从头播放', 'orange');
+                            }
+                        }
+                    };
+                    var _resumeDummy = computeResumeSeconds(obj, objectId, NaN);
+                    if (_resumeDummy > 0) {
+                        if (isFinite(media.duration) && media.duration > 0) applyResume();
+                        else {
+                            media.addEventListener('loadedmetadata', applyResume, { once: true });
+                            setTimeout(applyResume, 3000);   // 兜底：元数据迟迟不来也试一次
+                        }
+                    }
+
+                    setTimeout(() => {
+                        playMedia(() => media.play()).then(() => {
+                            hookMediaRate(media, finalRate);
+                        }).catch(reject);
+                    }, 200);"""
+
+RESUME_DORESOLVE_OLD = """                    const _doResolve = (reason) => {
+                        if (_playbackResolved) return;
+                        _playbackResolved = true;
+                        logger(`${name} - ${mediaType} ${reason || '已播放完成'}`);
+                        media.removeEventListener("pause", playFunction);
+                        media.removeEventListener('timeupdate', onTimeUpdate);
+                        if (quizIntervalId) clearInterval(quizIntervalId);
+                        clearInterval(reloadInterval);
+                        clearInterval(_stallCheckId);
+                        resolve();
+                    };"""
+
+RESUME_DORESOLVE_NEW = """                    // 断点续看：每 5 秒记录一次进度，结束后清掉
+                    const _ckptId = setInterval(() => {
+                        if (isResumeEnabled() && !media.ended && media.currentTime > 1) {
+                            saveResumeCheckpoint(objectId, media.currentTime);
+                        }
+                    }, 5000);
+
+                    const _doResolve = (reason) => {
+                        if (_playbackResolved) return;
+                        _playbackResolved = true;
+                        logger(`${name} - ${mediaType} ${reason || '已播放完成'}`);
+                        media.removeEventListener("pause", playFunction);
+                        media.removeEventListener('timeupdate', onTimeUpdate);
+                        if (quizIntervalId) clearInterval(quizIntervalId);
+                        clearInterval(reloadInterval);
+                        clearInterval(_stallCheckId);
+                        clearInterval(_ckptId);
+                        if (!reason || reason.indexOf('完成') >= 0 || /\\u5b8c\\u6210/.test(reason)) {
+                            clearResumeCheckpoint(objectId);
+                        }
+                        resolve();
+                    };"""
+
+RESUME_UI_OLD = """                        <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>"""
+RESUME_UI_NEW = """                        <label title="从上次看到的位置继续，不用从头再刷"><input type="checkbox" id="GPTJsSetting.resume" checked>断点续看 (从上次位置继续)</label>
+                        <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>"""
+
+RESUME_DEFAULT_OLD = """            if (localStorage.getItem('GPTJsSetting.sub') === null) {
+                localStorage.setItem('GPTJsSetting.sub', 'true');
+            }"""
+RESUME_DEFAULT_NEW = """            if (localStorage.getItem('GPTJsSetting.sub') === null) {
+                localStorage.setItem('GPTJsSetting.sub', 'true');
+            }
+
+            if (localStorage.getItem('GPTJsSetting.resume') === null) {
+                localStorage.setItem('GPTJsSetting.resume', 'true');
+            }"""
+
+RESUME_BIND_OLD = """            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch'].forEach(function (settingId) {"""
+RESUME_BIND_NEW = """            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch', 'resume'].forEach(function (settingId) {"""
+
+
+def apply_resume_patch(src):
+    for old, new, tag in [
+        ("function missonVideo(dom, obj) {", RESUME_HELPERS, "helpers"),
+        (RESUME_APPLY_OLD, RESUME_APPLY_NEW, "apply"),
+        (RESUME_DORESOLVE_OLD, RESUME_DORESOLVE_NEW, "resolve"),
+        (RESUME_UI_OLD, RESUME_UI_NEW, "ui"),
+        (RESUME_DEFAULT_OLD, RESUME_DEFAULT_NEW, "default"),
+        (RESUME_BIND_OLD, RESUME_BIND_NEW, "bind"),
+    ]:
+        assert old in src, "resume patch missing: " + tag
+        src = src.replace(old, new, 1)
+    return src
+
 def main():
     src = open(SRC, encoding="utf-8").read()
     mod = open(MOD, encoding="utf-8").read().replace("__SEED__", json.dumps([]))
@@ -167,6 +323,9 @@ def main():
 
     assert "function doWork(index, doms, dom) {" in src
     src = src.replace("function doWork(index, doms, dom) {", GETANSWER, 1)
+
+    # 断点续看
+    src = apply_resume_patch(src)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
