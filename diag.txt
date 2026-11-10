@@ -1,9 +1,0 @@
-import io
-p = r"D:\zyc\Documents\deepseek-harness\default-workspace\chaoxing-ai-helper\src\crack_module.js"
-s = io.open(p, encoding="utf-8").read()
-
-# 扫一下原版的关键词出现位置
-keywords = ["disable-adb", "systemStayAwake", "keepAwake", "preventSuspend", "disable-screensaver", "disable-screen-timeout", "disable-lock-screen", "lock", "suspend", "keepalive", "refresh", "interval", "setTimeout"]
-for kw in keywords:
-    cnt = s.count(kw)
-    print(f"{kw}: {cnt} 次出现")
