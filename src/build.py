@@ -25,7 +25,7 @@ HEADER_OLD = """// @name                ChatGPT学习通作业考试助手
 
 HEADER_NEW = f"""// @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/{REPO}
-// @version             3.2.9
+// @version             3.2.10
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           {RAW}
@@ -38,10 +38,28 @@ PANEL_NEW = """            $('#userInfo').html(
                 (CRACK.enabled ? '<b style="color:#059669">免积分破解模式：答题走免费通道，不消耗积分</b><br>' : '')
                 + notice + '积分余额:' + score + (CRACK.enabled ? '（仅展示，不再扣费）' : '')
             );
-            var _poolLeft = crackPoolCredits();
-            $('#userInfo').append($('<div>')
-                .css({ marginTop: '6px', fontSize: '12px', color: _poolLeft > 0 ? '#059669' : '#ea580c' })
-                .text('账号池：' + crackPoolRead().length + ' 个号 / 约 ' + _poolLeft + ' 道题' + (CRACK.autoRefill ? '（后台自动补充）' : '')));"""
+            function _poolText() {
+                var left = crackPoolCredits();
+                var st = '';
+                try {
+                    var raw = localStorage.getItem('GPTJsCrack.keeperStatus');
+                    if (raw) {
+                        var o = JSON.parse(raw);
+                        if (o && o.t && Date.now() - (o.ts || 0) < 10 * 60 * 1000) st = ' · ' + o.t;
+                    }
+                } catch (e) { }
+                return '账号池：' + crackPoolRead().length + ' 个号 / 约 ' + left + ' 道题' + (CRACK.autoRefill ? '（后台自动补充）' : '') + st;
+            }
+            var $poolLine = $('<div>').css({ marginTop: '6px', fontSize: '12px', color: '#059669' }).text(_poolText());
+            $('#userInfo').append($poolLine);
+            if (!$poolLine.data('crackTimer')) {
+                var _t = setInterval(function () {
+                    if (!document.body.contains($poolLine[0])) { clearInterval(_t); return; }
+                    var left = crackPoolCredits();
+                    $poolLine.css('color', left > 0 ? '#059669' : '#ea580c').text(_poolText());
+                }, 5000);
+                $poolLine.data('crackTimer', _t);
+            }"""
 
 AUTH_OLD = "var _authPromise = initFastestHost();"
 AUTH_NEW = """var _authPromise = CRACK.enabled
@@ -138,6 +156,10 @@ def main():
 
     assert FN_OLD in src
     src = src.replace(FN_OLD, FN_NEW, 1)
+
+    # 原版逻辑里的版本号固定为接口版本，避免 @version 升级影响 v 参数
+    src = src.replace("GM_info['script']['version']", "'3.2.9'")
+    src = src.replace("encodeURIComponent(GM_info.script.version)", "'3.2.9'")
 
     assert "function doWork(index, doms, dom) {" in src
     src = src.replace("function doWork(index, doms, dom) {", GETANSWER, 1)

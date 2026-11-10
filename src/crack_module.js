@@ -30,8 +30,9 @@ var CRACK = {
     /* 后台自动补池 */
     autoRefill: true,
     poolTarget: 200,
-    keeperInterval: 45000,
-    mintParallel: 3,
+    keeperInterval: 45000,     // 保留兼容（已不再用于 setInterval）
+    keeperHeartbeat: 15000,    // 心跳间隔
+    mintParallel: 2,
     relayTimeout: 15000
 };
 
@@ -167,7 +168,6 @@ var CRACK_RELAYS = [
     { base: 'https://cors.eu.org/', mode: 'path' },
     { base: 'https://api.allorigins.win/raw?url=', mode: 'query' },
     { base: 'https://api.allorigins.win/get?url=', mode: 'query' },
-    { base: 'https://api.codetabs.com/v1/proxy?quest=', mode: 'query' },
     { base: 'https://api.cors.lol/?url=', mode: 'query' }
 ];
 
@@ -254,8 +254,9 @@ function crackMintAttempt(relay) {
         }
         crackLog('铸号失败 [' + tag + '] http=' + res.status + ' score=' + res.score);
         crackRelayScoreUp(relay, -0.2);
-        if (res.status === 429) crackRelayMark(relay, 180000);        // 限流：3 分钟内不再用
-        else if (res.status === -1) crackRelayMark(relay, 60000);      // 超时：1 分钟
+        if (res.status === 429) crackRelayMark(relay, 180000);        // 限流：3 分钟
+        else if (res.status === -1 || res.status === 408) crackRelayMark(relay, 90000); // 超时：1.5 分钟
+        else if (res.status >= 500) crackRelayMark(relay, 120000);     // 中转自身故障：2 分钟
         else if (res.status === 200 && res.score === 0) crackRelayMark(relay, 600000); // 该出口 IP 已被用过
         return null;
     });
@@ -265,6 +266,15 @@ function crackMintAttempt(relay) {
 function crackMintRound(parallel) {
     var n = Math.max(1, parallel || 3);
     var avail = crackRelayAvailable();
+    if (!avail.length) {
+        var wait = 0;
+        CRACK_RELAYS.forEach(function (r) {
+            var left = (crackRelayCool[r.base] || 0) - Date.now();
+            if (left > 0) wait = Math.min(wait || left, left);
+        });
+        crackLog('所有中转都在冷却中，' + Math.max(1, Math.round(wait / 1000)) + 's 后恢复（期间只试直连）');
+        crackKeeperStatus('中转冷却中（' + Math.max(1, Math.round(wait / 1000)) + 's）');
+    }
     avail.sort(function (a, b) { return crackRelayScore(b) - crackRelayScore(a); });
     var relays = crackShuffle(avail.slice(0, Math.max(2, n)));
     var jobs = [];
@@ -320,37 +330,83 @@ function crackMint(budgetMs) {
 /* ---------------- 后台自动补池 ---------------- */
 var crackKeeperTimer = null;
 var crackKeeperBusy = false;
+var crackKeeperBusyAt = 0;
 var crackKeeperFails = 0;
+var crackKeeperNextAt = 0;
 
+function crackKeeperStatus(text) {
+    try { localStorage.setItem('GPTJsCrack.keeperStatus', JSON.stringify({ t: text, ts: Date.now() })); } catch (e) { }
+}
+
+/* 心跳间隔固定 15s，真正的"什么时候补"由 crackKeeperNextAt 控制，避免被 clearInterval 搞崩 */
 function crackKeeperTick() {
-    if (!CRACK.autoRefill || crackKeeperBusy) return;
-    var credits = crackPoolCredits();
-    if (credits >= (CRACK.poolTarget || 200)) return;
-    crackKeeperBusy = true;
-    crackLog('账号池偏低（' + crackPoolRead().length + ' 个号 / ' + credits + ' 分），后台补充中...');
-    crackMintRound(CRACK.mintParallel || 3).then(function (got) {
-        crackKeeperBusy = false;
-        var left = crackPoolCredits();
-        if (got.length) {
-            crackKeeperFails = 0;
-            crackLog('补池完成 +' + got.length + ' 个号，当前 ' + crackPoolRead().length + ' 个号 / ' + left + ' 分');
-        } else {
-            crackKeeperFails++;
-            var wait = Math.min(300000, (CRACK.keeperInterval || 45000) * Math.pow(1.6, crackKeeperFails));
-            crackLog('本轮没成功（中转限流），' + Math.round(wait / 1000) + 's 后再试');
-            if (crackKeeperTimer) {
-                clearInterval(crackKeeperTimer);
-                crackKeeperTimer = setInterval(crackKeeperTick, wait);
-            }
+    try {
+        if (!CRACK.autoRefill) return;
+        var now = Date.now();
+
+        // 同一个页面可能有多个 iframe，各自都跑一份 keeper：用本地时间戳做互斥
+        var lastAny = parseInt(localStorage.getItem('GPTJsCrack.keeperLast') || '0', 10);
+        if (now - lastAny < 20000) return;
+
+        if (now < crackKeeperNextAt) return;
+
+        if (crackKeeperBusy) {
+            if (now - crackKeeperBusyAt < 75000) return;   // 上一轮还在跑
+            crackLog('上一轮补池超时（>75s），强制重置');
+            crackKeeperBusy = false;
         }
-    }, function () { crackKeeperBusy = false; });
+
+        var credits = crackPoolCredits();
+        if (credits >= (CRACK.poolTarget || 200)) {
+            crackKeeperStatus('\u5df2\u5145\u8db3\uff08' + crackPoolRead().length + ' \u4e2a\u53f7 / ' + credits + ' \u5206\uff09');
+            return;
+        }
+
+        crackKeeperBusy = true;
+        crackKeeperBusyAt = now;
+        try { localStorage.setItem('GPTJsCrack.keeperLast', String(now)); } catch (e) { }
+        crackKeeperStatus('\u8865\u6c60\u4e2d\u2026\uff08\u5f53\u524d ' + credits + ' \u5206\uff09');
+        crackLog('keeper 心跳：池 ' + crackPoolRead().length + ' 个号 / ' + credits + ' 分，开始补');
+
+        Promise.resolve()
+            .then(function () { return crackMintRound(CRACK.mintParallel || 3); })
+            .then(function (got) {
+                got = got || [];
+                var left = crackPoolCredits();
+                if (got.length) {
+                    crackKeeperFails = 0;
+                    crackKeeperNextAt = Date.now() + 5000;
+                    crackLog('\u8865\u6c60\u5b8c\u6210 +' + got.length + ' \u4e2a\u53f7\uff0c\u5f53\u524d ' + crackPoolRead().length + ' \u4e2a\u53f7 / ' + left + ' \u5206');
+                    crackKeeperStatus('\u521a\u8865\u5230 ' + crackPoolRead().length + ' \u4e2a\u53f7 / ' + left + ' \u5206');
+                } else {
+                    crackKeeperFails++;
+                    var wait = Math.min(120000, 15000 * Math.pow(1.8, crackKeeperFails));
+                    crackKeeperNextAt = Date.now() + wait;
+                    crackLog('\u672c\u8f6e\u6ca1\u6210\u529f\uff0c' + Math.round(wait / 1000) + 's \u540e\u91cd\u8bd5\uff08\u7b2c ' + crackKeeperFails + ' \u6b21\u8fde\u7eed\u5931\u8d25\uff09');
+                    if (crackKeeperFails >= 3) {
+                        crackLog('\u516c\u5171\u4e2d\u8f6c\u53ef\u80fd\u88ab\u9650\u6d41\uff1a\u5efa\u8bae\u5207\u6362\u7f51\u7edc\uff08\u624b\u673a\u70ed\u70b9\uff09\u6216\u7b49\u51e0\u5206\u949f');
+                    }
+                    crackKeeperStatus('\u4e0a\u6b21\u8865\u6c60\u5931\u8d25\uff0c' + Math.round(wait / 1000) + 's \u540e\u91cd\u8bd5');
+                }
+            })
+            .catch(function (e) {
+                crackKeeperFails++;
+                crackKeeperNextAt = Date.now() + 60000;
+                crackLog('补池异常: ' + (e && e.message ? e.message : e));
+                crackKeeperStatus('\u8865\u6c60\u5f02\u5e38\uff0c\u7a0d\u540e\u91cd\u8bd5');
+            })
+            .then(function () { crackKeeperBusy = false; });
+    } catch (e) {
+        crackKeeperBusy = false;
+        crackLog('keeper 出错: ' + (e && e.message ? e.message : e));
+    }
 }
 
 function crackStartKeeper() {
     if (!CRACK.autoRefill || crackKeeperTimer) return;
     setTimeout(crackKeeperTick, 1500);
-    crackKeeperTimer = setInterval(crackKeeperTick, CRACK.keeperInterval || 45000);
-    crackLog('后台补池已启动：目标 ' + (CRACK.poolTarget || 200) + ' 分，每 ' + Math.round((CRACK.keeperInterval || 45000) / 1000) + 's 检查一次');
+    crackKeeperTimer = setInterval(crackKeeperTick, CRACK.keeperHeartbeat || 15000);
+    crackLog('\u540e\u53f0\u8865\u6c60\u5df2\u542f\u52a8\uff1a\u76ee\u6807 ' + (CRACK.poolTarget || 200) + ' \u5206\uff0c\u6bcf 15s \u5fc3\u8df3\uff0c\u4e0d\u8db3\u65f6\u81ea\u52a8\u8865\u5145');
 }
 
 /* ---------------- 主流程 ---------------- */

@@ -6,7 +6,7 @@
 > 原脚本：Ne-21 《ChatGPT学习通作业考试助手》 v3.2.9，本仓库在其基础上做免积分改造与打包。
 
 <p align="left">
-  <img alt="version" src="https://img.shields.io/badge/version-3.2.9-059669">
+  <img alt="version" src="https://img.shields.io/badge/version-3.2.10-059669">
   <img alt="platform" src="https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20%7C%20Firefox-2563eb">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-black">
 </p>
@@ -84,9 +84,11 @@
    ├─ ③ 现铸一个号         每题先试一次注册（失败自动回落 ②）
    └─ ④ 全挂              回退脚本原版逻辑（用你自己的积分）
         │
-        └─ 后台 Keeper：每 45s 检查池内积分，低于 200 分就并发铸号
-              （直连 + cors.eu.org + allorigins + cors.lol + codetabs，
-                429 冷却 3 分钟 / 超时 1 分钟 / 0 分 10 分钟，失败指数退避）
+        └─ 后台 Keeper：15s 一次心跳，池内积分低于 200 就并发铸号
+              （直连 + cors.eu.org + allorigins + cors.lol，
+                429 冷却 3 分钟 / 超时 1.5 分钟 / 5xx 冷却 2 分钟 / 0 分冷却 10 分钟）
+              单轮失败自动退避 27s → 49s → 87s（上限 2 分钟），成功即复位
+              单轮超过 75s 未结束会被看门狗强制复位，不会卡死
 ```
 
 细节见 [工作原理](docs/05-工作原理.md)。
@@ -149,8 +151,8 @@ var CRACK = {
 
     autoRefill: true,         // 后台自动补池
     poolTarget: 200,          // 池内积分低于此值就补
-    keeperInterval: 45000,    // 检查间隔(ms)
-    mintParallel: 3,          // 每轮并发中转数
+    keeperHeartbeat: 15000,   // 心跳间隔(ms)
+    mintParallel: 2,          // 每轮并发中转数
     relayTimeout: 15000
 };
 ```
