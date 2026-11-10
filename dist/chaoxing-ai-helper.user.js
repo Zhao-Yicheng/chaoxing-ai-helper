@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/Zhao-Yicheng/chaoxing-ai-helper
-// @version             3.2.10
+// @version             3.2.11
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
@@ -502,6 +502,7 @@ var crackKeeperBusy = false;
 var crackKeeperBusyAt = 0;
 var crackKeeperFails = 0;
 var crackKeeperNextAt = 0;
+var crackKeeperTicks = 0;
 
 function crackKeeperStatus(text) {
     try { localStorage.setItem('GPTJsCrack.keeperStatus', JSON.stringify({ t: text, ts: Date.now() })); } catch (e) { }
@@ -525,9 +526,11 @@ function crackKeeperTick() {
             crackKeeperBusy = false;
         }
 
+        crackKeeperTicks++;
         var credits = crackPoolCredits();
         if (credits >= (CRACK.poolTarget || 200)) {
             crackKeeperStatus('\u5df2\u5145\u8db3\uff08' + crackPoolRead().length + ' \u4e2a\u53f7 / ' + credits + ' \u5206\uff09');
+            if (crackKeeperTicks % 4 === 0) { crackLog('keeper 心跳：池 ' + crackPoolRead().length + ' 个号 / ' + credits + ' 分 ≥ 目标 ' + (CRACK.poolTarget || 200) + '，无需补充'); }
             return;
         }
 
@@ -667,10 +670,18 @@ function crackGetAnswer(payload, model, ctx) {
 }
 
 /* 启动自检 + 后台补池 */
+function crackIsTop() {
+    try { return window.top === window; } catch (e) { return false; }
+}
+
 function crackBoot() {
     var n = crackSeedLoad();
     var size = crackPoolRead().length;
+    if (crackIsTop()) {
     crackLog('账号池就绪: ' + size + ' 个号（本次灌入 ' + n + ' 个种子），可用题目约 ' + crackPoolCredits() + ' 道');
+    } else {
+        crackLog('子框架加载：账号池 ' + size + ' 个号 / ' + crackPoolCredits() + ' 分（补池由顶层页面负责）');
+    }
     crackStartKeeper();
 }
 setTimeout(crackBoot, 800);
