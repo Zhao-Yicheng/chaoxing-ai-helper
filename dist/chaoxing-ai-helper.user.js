@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/Zhao-Yicheng/chaoxing-ai-helper
-// @version             3.3.0
+// @version             3.3.1
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
