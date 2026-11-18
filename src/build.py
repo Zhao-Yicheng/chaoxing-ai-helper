@@ -25,12 +25,11 @@ HEADER_OLD = """// @name                ChatGPT学习通作业考试助手
 
 HEADER_NEW = f"""// @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/{REPO}
-// @version             3.3.1
+// @version             3.3.2
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           {RAW}
 // @downloadURL         {RAW}
-// @connect             *
 // @connect             cors.eu.org
 // @connect             api.allorigins.win
 // @connect             api.cors.lol
@@ -327,20 +326,22 @@ def main():
     # 断点续看
     src = apply_resume_patch(src)
 
-    # 可选：收窄站点匹配范围（环境变量 XXT_NARROW=1）
-    # 默认保留原版的全部镜像站；收窄后只在官方主域运行
-    if os.environ.get("XXT_NARROW") == "1":
-        import re as _re
-        keep = ("*://*.chaoxing.com/*", "*://*.xuexitong.com/*")
-        lines = src.split("\n")
-        out = []
-        for ln in lines:
-            m = _re.match(r"^// @match\s+(\S+)", ln)
-            if m and m.group(1) not in keep:
-                continue
-            out.append(ln)
-        src = "\n".join(out)
-        print("[i] 已收窄 @match 至官方主域")
+    # 站点匹配范围：默认只保留官方主域（授权范围最小）
+    # 需要覆盖各校镜像站时，用环境变量 XXT_WIDE=1 构建
+    import re as _re
+    keep = ("*://*.chaoxing.com/*", "*://*.xuexitong.com/*")
+    lines = src.split("\n")
+    out = []
+    for ln in lines:
+        m = _re.match(r"^// @match\s+(\S+)", ln)
+        if m and m.group(1) not in keep:
+            continue
+        out.append(ln)
+    src = "\n".join(out)
+    if os.environ.get("XXT_WIDE") == "1":
+        print("[i] XXT_WIDE=1：保留原版全部镜像站 @match")
+    else:
+        print("[i] @match 已收窄为：%s" % " , ".join(keep))
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:

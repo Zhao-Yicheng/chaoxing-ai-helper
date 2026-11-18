@@ -1,38 +1,16 @@
 // ==UserScript==
 // @name                学习通AI答题助手（免积分版）
 // @namespace           https://github.com/Zhao-Yicheng/chaoxing-ai-helper
-// @version             3.3.1
+// @version             3.3.2
 // @description         学习通/超星作业考试 AI 自动答题。免积分破解：u=0 免费通道 + 后台自动铸号建池，不消耗积分。原作者: Ne-21
 // @author              Zhao-Yicheng (破解改造)
 // @updateURL           https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
 // @downloadURL         https://raw.githubusercontent.com/Zhao-Yicheng/chaoxing-ai-helper/main/dist/chaoxing-ai-helper.user.js
-// @connect             *
 // @connect             cors.eu.org
 // @connect             api.allorigins.win
 // @connect             api.cors.lol
 // @match               *://*.chaoxing.com/*
 // @match               *://*.xuexitong.com/*
-// @match               *://*.edu.cn/*
-// @match               *://*.org.cn/*
-// @match               *://*.ac.cn/*
-// @match               *://*.xueyinonline.com/*
-// @match               *://*.sslibrary.com/*
-// @match               *://*.neauce.com/*
-// @match               *://*.nbdlib.cn/*
-// @match               *://*.hnsyu.net/*
-// @match               *://*.qutjxjy.cn/*
-// @match               *://*.ynny.cn/*
-// @match               *://*.hnvist.cn/*
-// @match               *://*.fjlecb.cn/*
-// @match               *://*.gdhkmooc.com/*
-// @match               *://*.cugbonline.cn/*
-// @match               *://*.zjelib.cn/*
-// @match               *://*.cqrspx.cn/*
-// @match               *://*.zhihui-yun.com/*
-// @match               *://*.cqie.cn/*
-// @match               *://*.ccqmxx.com/*
-// @match               *://*.jxgmxy.com/*
-// @match               *://*.jnzyjsxy.cn/*
 // @connect             911285.xyz
 // @connect             gptjs.808860.xyz
 // @connect             127.0.0.1

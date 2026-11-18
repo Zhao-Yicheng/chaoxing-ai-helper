@@ -6,7 +6,7 @@
 > 基于 Ne-21《ChatGPT学习通作业考试助手》v3.2.9 改造。
 
 <p align="left">
-  <img alt="version" src="https://img.shields.io/badge/version-3.3.1-059669">
+  <img alt="version" src="https://img.shields.io/badge/version-3.3.2-059669">
   <img alt="platform" src="https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20%7C%20Firefox-2563eb">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-black">
   <img alt="cost" src="https://img.shields.io/badge/%E7%A7%AF%E5%88%86%E6%B6%88%E8%80%97-0-ef4444">
@@ -89,8 +89,8 @@
 | **A. 油猴脚本**（Tampermonkey / ScriptCat） | 已经装过脚本管理器 | 单文件、支持自动更新 | 需要先装管理器 |
 | **B. 浏览器扩展** | 不想多装东西、怕粘贴出错 | 解压加载即可，依赖全内置 | 需开"开发者模式" |
 
-> **扩展版只在 `*.chaoxing.com` / `*.xuexitong.com` 运行**（授权范围最小）；
-> 油猴脚本版默认还覆盖各校镜像站（`*.edu.cn` 等），需要收窄时用 `XXT_NARROW=1 python src/build.py` 构建。
+> **两种方式都只在 `*.chaoxing.com` / `*.xuexitong.com` 运行**（授权范围最小）。
+> 需要覆盖各校镜像站（`*.edu.cn` 等）时，用 `XXT_WIDE=1 python src/build.py` 构建。
 
 > ⚠️ **两者只能装一个**，同时装会重复注入，出现两套面板互相抢答题。
 

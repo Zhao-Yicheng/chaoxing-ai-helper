@@ -29,7 +29,7 @@ ZIP = os.path.join(DIST, "chaoxing-ai-helper-extension.zip")
 
 LIBS = os.path.join(BASE, "libs")
 
-VERSION = "3.3.1"
+VERSION = "3.3.2"
 
 # 只在官方主域运行，避免"读取所有网站数据"的大范围授权提示
 CONTENT_MATCHES = [
@@ -277,6 +277,10 @@ def main():
         raise SystemExit("请先运行 python src/build.py")
 
     script = read(USER_JS)
+    # 站点匹配范围以构建好的 user.js 为准，保证扩展与脚本一致
+    script_matches = re.findall(r"^// @match\s+(\S+)", script, re.M)
+    if script_matches:
+        CONTENT_MATCHES[:] = script_matches
     jq = read(os.path.join(LIBS, "jquery-3.7.1.min.js"))
     swal = read(os.path.join(LIBS, "sweetalert2-11.1.0.all.min.js"))
     typr = read(os.path.join(LIBS, "TyprMd5.js"))
